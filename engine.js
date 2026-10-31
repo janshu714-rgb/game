@@ -82,14 +82,51 @@ class InputManager {
         
         window.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
-            e.preventDefault();
+            if (!['F5', 'F11', 'F12'].includes(e.code)) {
+                e.preventDefault();
+            }
         });
         window.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
-            e.preventDefault();
+            if (!['F5', 'F11', 'F12'].includes(e.code)) {
+                e.preventDefault();
+            }
         });
         
-        // Touch / mobile controls state
+        // Touch states (held down flags)
+        this.touchState = {
+            left: false,
+            right: false,
+            jump: false,
+            interact: false,
+            restart: false
+        };
+        this._prevTouchState = {
+            left: false,
+            right: false,
+            jump: false,
+            interact: false,
+            restart: false
+        };
+        this.touchJustPressed = {
+            left: false,
+            right: false,
+            jump: false,
+            interact: false,
+            restart: false
+        };
+        // Latch for taps occurring between frames
+        this.pendingTaps = {
+            left: false,
+            right: false,
+            jump: false,
+            interact: false,
+            restart: false
+        };
+        this.jumpHoldFrames = 0;
+        this.moveHoldFrames = { left: 0, right: 0 };
+        
+        // Backward-compatible properties for direct access
         this.touchLeft = false;
         this.touchRight = false;
         this.touchJump = false;
@@ -97,30 +134,86 @@ class InputManager {
         this.touchRestart = false;
     }
     
+    setTouch(action, isDown) {
+        const val = !!isDown;
+        if (this.touchState.hasOwnProperty(action)) {
+            this.touchState[action] = val;
+        }
+        if (val) {
+            this.pendingTaps[action] = true;
+            if (action === 'jump') {
+                this.jumpHoldFrames = 10; // Keep jump held for 10 frames for proper jump height
+            }
+            if (action === 'left' || action === 'right') {
+                this.moveHoldFrames[action] = 6;
+            }
+        } else {
+            // When explicitly released
+            if (action === 'jump') {
+                this.jumpHoldFrames = 0;
+            }
+        }
+        if (action === 'left') this.touchLeft = val;
+        if (action === 'right') this.touchRight = val;
+        if (action === 'jump') this.touchJump = val;
+        if (action === 'interact') this.touchInteract = val;
+        if (action === 'restart') this.touchRestart = val;
+    }
+    
+    triggerTap(action) {
+        this.setTouch(action, true);
+        this.pendingTaps[action] = true;
+        this.touchJustPressed[action] = true;
+        if (action === 'jump') {
+            this.jumpHoldFrames = 12;
+        }
+        if (action === 'left' || action === 'right') {
+            this.moveHoldFrames[action] = 8;
+        }
+        setTimeout(() => {
+            this.setTouch(action, false);
+        }, 150);
+    }
+    
     update() {
+        // Keyboard edge detection
         for (const key in this.keys) {
-            this.justPressed[key] = this.keys[key] && !this._prevKeys[key];
+            this.justPressed[key] = !!(this.keys[key] && !this._prevKeys[key]);
         }
         this._prevKeys = { ...this.keys };
 
-        // Reset one-shot touch flags
-        this.touchJump = false;
-        this.touchInteract = false;
-        this.touchRestart = false;
+        // Frame-based hold decay for jump and taps
+        if (this.jumpHoldFrames > 0 && !this.touchState.jump) {
+            this.jumpHoldFrames--;
+        }
+        if (this.moveHoldFrames.left > 0 && !this.touchState.left) {
+            this.moveHoldFrames.left--;
+        }
+        if (this.moveHoldFrames.right > 0 && !this.touchState.right) {
+            this.moveHoldFrames.right--;
+        }
+
+        // Touch edge detection (transition from false to true OR latched tap)
+        for (const action in this.touchState) {
+            const edge = this.touchState[action] && !this._prevTouchState[action];
+            this.touchJustPressed[action] = !!(edge || this.pendingTaps[action]);
+            this.pendingTaps[action] = false; // consume latch
+        }
+        this._prevTouchState = { ...this.touchState };
     }
     
     isDown(action) {
         switch (action) {
             case 'left':
-                return this.keys['KeyA'] || this.keys['ArrowLeft'] || this.touchLeft;
+                return !!(this.keys['KeyA'] || this.keys['ArrowLeft'] || this.touchState.left || this.touchLeft || (this.moveHoldFrames.left > 0));
             case 'right':
-                return this.keys['KeyD'] || this.keys['ArrowRight'] || this.touchRight;
+                return !!(this.keys['KeyD'] || this.keys['ArrowRight'] || this.touchState.right || this.touchRight || (this.moveHoldFrames.right > 0));
             case 'jump':
-                return this.keys['KeyW'] || this.keys['ArrowUp'] || this.keys['Space'] || this.touchJump;
+                return !!(this.keys['KeyW'] || this.keys['ArrowUp'] || this.keys['Space'] || this.touchState.jump || this.touchJump || (this.jumpHoldFrames > 0));
             case 'interact':
-                return this.keys['KeyE'] || this.touchInteract;
+                return !!(this.keys['KeyE'] || this.touchState.interact || this.touchInteract);
             case 'restart':
-                return this.keys['KeyR'] || this.touchRestart;
+                return !!(this.keys['KeyR'] || this.touchState.restart || this.touchRestart);
             default:
                 return false;
         }
@@ -129,11 +222,11 @@ class InputManager {
     wasJustPressed(action) {
         switch (action) {
             case 'jump':
-                return this.justPressed['KeyW'] || this.justPressed['ArrowUp'] || this.justPressed['Space'] || this.touchJump;
+                return !!(this.justPressed['KeyW'] || this.justPressed['ArrowUp'] || this.justPressed['Space'] || this.touchJustPressed.jump);
             case 'interact':
-                return this.justPressed['KeyE'] || this.touchInteract;
+                return !!(this.justPressed['KeyE'] || this.touchJustPressed.interact);
             case 'restart':
-                return this.justPressed['KeyR'] || this.touchRestart;
+                return !!(this.justPressed['KeyR'] || this.touchJustPressed.restart);
             default:
                 return false;
         }
@@ -1353,31 +1446,102 @@ class Camera {
         this.y = 0;
         this.targetX = 0;
         this.targetY = 0;
-        this.canvasWidth = canvasWidth;
-        this.canvasHeight = canvasHeight;
-        this.smoothing = 0.08;
+        this.canvasWidth = canvasWidth || 800;
+        this.canvasHeight = canvasHeight || 600;
+        this.smoothing = 0.12;
         this.shakeAmount = 0;
-        this.shakeDecay = 0.9;
+        this.shakeDecay = 0.88;
+        
+        // Responsive viewport & zoom
+        this.zoom = 1;
+        this.screenOffsetX = 0;
+        this.screenOffsetY = 0;
+        this.viewportW = this.canvasWidth;
+        this.viewportH = this.canvasHeight;
+        this.isPortrait = false;
+        this.controllerHeight = 0;
     }
     
-    follow(targetX, targetY, levelWidth, levelHeight) {
-        this.targetX = targetX - this.canvasWidth / 2;
-        this.targetY = targetY - this.canvasHeight / 2;
+    updateViewport(levelWidth, levelHeight, isTouchDevice) {
+        this.isPortrait = this.canvasHeight > this.canvasWidth;
         
-        // Clamp to level bounds
-        const maxX = levelWidth * TILE - this.canvasWidth;
-        const maxY = levelHeight * TILE - this.canvasHeight;
-        this.targetX = Math.max(0, Math.min(this.targetX, maxX));
-        this.targetY = Math.max(0, Math.min(this.targetY, maxY));
+        // If mobile portrait: reserve bottom portion for on-screen gamepad dashboard
+        if (this.isPortrait && isTouchDevice) {
+            this.controllerHeight = Math.min(300, Math.max(190, Math.floor(this.canvasHeight * 0.38)));
+            this.viewportW = this.canvasWidth;
+            this.viewportH = Math.max(220, this.canvasHeight - this.controllerHeight);
+        } else {
+            this.controllerHeight = 0;
+            this.viewportW = this.canvasWidth;
+            this.viewportH = this.canvasHeight;
+        }
         
-        // Smooth follow
-        this.x += (this.targetX - this.x) * this.smoothing;
-        this.y += (this.targetY - this.y) * this.smoothing;
+        const levelPixelW = (levelWidth || 20) * TILE;
+        const levelPixelH = (levelHeight || 12) * TILE;
+        
+        if (this.isPortrait) {
+            // In portrait: fit level width into available viewport with margins
+            const padX = 14;
+            const padY = 20;
+            const scaleX = (this.viewportW - padX * 2) / levelPixelW;
+            const scaleY = (this.viewportH - padY * 2) / levelPixelH;
+            this.zoom = Math.min(scaleX, scaleY);
+            // Clamp zoom to comfortable range
+            this.zoom = Math.max(0.45, Math.min(1.2, this.zoom));
+        } else {
+            // In landscape: fit level height comfortably, leaving room for HUD and thumb controls
+            const padY = 32;
+            const padX = isTouchDevice ? 120 : 32;
+            const scaleY = (this.viewportH - padY) / levelPixelH;
+            const scaleX = (this.viewportW - padX) / levelPixelW;
+            this.zoom = Math.min(scaleX, scaleY);
+            // Clamp zoom
+            this.zoom = Math.max(0.65, Math.min(2.0, this.zoom));
+        }
+    }
+    
+    follow(targetX, targetY, levelWidth, levelHeight, isTouchDevice) {
+        this.updateViewport(levelWidth, levelHeight, isTouchDevice);
+        
+        const levelPixelW = levelWidth * TILE;
+        const levelPixelH = levelHeight * TILE;
+        const visibleWorldW = this.viewportW / this.zoom;
+        const visibleWorldH = this.viewportH / this.zoom;
+        
+        // X positioning & centering
+        if (levelPixelW <= visibleWorldW) {
+            // Entire level fits horizontally: center it perfectly!
+            this.x = 0;
+            this.targetX = 0;
+            this.screenOffsetX = (this.viewportW - levelPixelW * this.zoom) / 2;
+        } else {
+            // Level is wider than visible area: follow target & clamp
+            this.screenOffsetX = 0;
+            const maxX = levelPixelW - visibleWorldW;
+            this.targetX = Math.max(0, Math.min(targetX - visibleWorldW / 2, maxX));
+            this.x += (this.targetX - this.x) * this.smoothing;
+        }
+        
+        // Y positioning & centering
+        if (levelPixelH <= visibleWorldH) {
+            // Entire level fits vertically: center it perfectly!
+            this.y = 0;
+            this.targetY = 0;
+            this.screenOffsetY = (this.viewportH - levelPixelH * this.zoom) / 2;
+        } else {
+            // Level is taller than visible area: follow target & clamp
+            this.screenOffsetY = 0;
+            const maxY = levelPixelH - visibleWorldH;
+            this.targetY = Math.max(0, Math.min(targetY - visibleWorldH / 2, maxY));
+            this.y += (this.targetY - this.y) * this.smoothing;
+        }
         
         // Screen shake
         if (this.shakeAmount > 0.5) {
-            this.x += (Math.random() - 0.5) * this.shakeAmount;
-            this.y += (Math.random() - 0.5) * this.shakeAmount;
+            const sx = (Math.random() - 0.5) * this.shakeAmount;
+            const sy = (Math.random() - 0.5) * this.shakeAmount;
+            this.screenOffsetX += sx;
+            this.screenOffsetY += sy;
             this.shakeAmount *= this.shakeDecay;
         } else {
             this.shakeAmount = 0;
