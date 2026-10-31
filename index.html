@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DÉJÀ VU LOOP</title>
+    <meta name="description" content="A puzzle platformer where your past lives become your allies. Cooperate with your ghosts to solve mind-bending puzzles.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Title Screen Overlay -->
+    <div id="titleScreen" class="overlay active">
+        <div class="particles" id="titleParticles"></div>
+        <div class="title-content">
+            <div class="title-loop-icon">∿</div>
+            <h1 class="game-title">
+                <span class="title-deja">DÉJÀ</span>
+                <span class="title-vu">VU</span>
+                <span class="title-loop">LOOP</span>
+            </h1>
+            <p class="tagline">Your past is your only ally</p>
+            <button id="startBtn" class="btn-primary">
+                <span class="btn-text">TAP TO BEGIN</span>
+                <span class="btn-glow"></span>
+            </button>
+            <div class="controls-hint">
+                <div class="key-hint"><kbd>A</kbd><kbd>D</kbd> Move</div>
+                <div class="key-hint"><kbd>W</kbd> / <kbd>SPACE</kbd> Jump</div>
+                <div class="key-hint"><kbd>E</kbd> Interact</div>
+                <div class="key-hint"><kbd>R</kbd> Restart Loop</div>
+            </div>
+        </div>
+        <div class="title-ghosts">
+            <div class="title-ghost ghost-1"></div>
+            <div class="title-ghost ghost-2"></div>
+            <div class="title-ghost ghost-3"></div>
+        </div>
+    </div>
+
+    <!-- Level Complete Overlay -->
+    <div id="levelComplete" class="overlay">
+        <div class="level-complete-content">
+            <h2 class="complete-title">LEVEL COMPLETE</h2>
+            <div class="stars-container" id="starsContainer">
+                <span class="star">★</span>
+                <span class="star">★</span>
+                <span class="star">★</span>
+            </div>
+            <div class="loop-count" id="loopCountDisplay">Loops: 0</div>
+            <button id="nextLevelBtn" class="btn-primary">
+                <span class="btn-text">NEXT LEVEL</span>
+                <span class="btn-glow"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Death / Loop Overlay -->
+    <div id="loopOverlay" class="overlay">
+        <div class="loop-content">
+            <h2 class="loop-title" id="loopTitle">Loop 2</h2>
+            <p class="loop-subtitle">Your echo remains.</p>
+        </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div class="hud-left">
+            <div class="hud-level" id="hudLevel">Level 1</div>
+            <div class="hud-world" id="hudWorld">AWAKENING</div>
+        </div>
+        <div class="hud-center">
+            <div class="hud-loops">
+                <span class="loop-icon">↻</span>
+                <span id="hudLoops">Loop 1</span>
+            </div>
+        </div>
+        <div class="hud-right">
+            <button id="restartBtn" class="hud-btn" title="Restart Level">↺</button>
+            <button id="menuBtn" class="hud-btn" title="Menu">☰</button>
+        </div>
+    </div>
+
+    <!-- Level Select Overlay -->
+    <div id="levelSelect" class="overlay">
+        <div class="level-select-content">
+            <h2 class="select-title">SELECT LEVEL</h2>
+            <div class="level-grid" id="levelGrid"></div>
+            <button id="backToMenuBtn" class="btn-secondary">BACK</button>
+        </div>
+    </div>
+
+    <script src="engine.js"></script>
+    <script src="levels.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
