@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>DÉJÀ VU LOOP</title>
     <meta name="description" content="A puzzle platformer where your past lives become your allies. Cooperate with your ghosts to solve mind-bending puzzles.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,11 +28,14 @@
                 <span class="btn-text">TAP TO BEGIN</span>
                 <span class="btn-glow"></span>
             </button>
-            <div class="controls-hint">
+            <div class="controls-hint desktop-only">
                 <div class="key-hint"><kbd>A</kbd><kbd>D</kbd> Move</div>
                 <div class="key-hint"><kbd>W</kbd> / <kbd>SPACE</kbd> Jump</div>
                 <div class="key-hint"><kbd>E</kbd> Interact</div>
                 <div class="key-hint"><kbd>R</kbd> Restart Loop</div>
+            </div>
+            <div class="controls-hint mobile-only">
+                <div class="key-hint">✦ Touch controls enabled for mobile ✦</div>
             </div>
         </div>
         <div class="title-ghosts">
@@ -82,6 +85,33 @@
         <div class="hud-right">
             <button id="restartBtn" class="hud-btn" title="Restart Level">↺</button>
             <button id="menuBtn" class="hud-btn" title="Menu">☰</button>
+        </div>
+    </div>
+
+    <!-- Mobile On-Screen Gamepad Controls -->
+    <div id="mobileControls" class="mobile-controls">
+        <div class="mobile-pad-left">
+            <button id="touchBtnLeft" class="touch-btn touch-btn-dir" aria-label="Move Left">
+                <span class="touch-arrow">◀</span>
+            </button>
+            <button id="touchBtnRight" class="touch-btn touch-btn-dir" aria-label="Move Right">
+                <span class="touch-arrow">▶</span>
+            </button>
+        </div>
+        <div class="mobile-pad-right">
+            <button id="touchBtnRewind" class="touch-btn touch-btn-rewind" aria-label="Rewind Loop">
+                <span class="rewind-icon">↺</span>
+                <span class="rewind-label">LOOP</span>
+            </button>
+            <button id="touchBtnInteract" class="touch-btn touch-btn-interact" aria-label="Interact">
+                <span class="interact-icon">✦</span>
+                <span class="interact-label">ACT</span>
+            </button>
+            <button id="touchBtnJump" class="touch-btn touch-btn-jump" aria-label="Jump">
+                <span class="jump-arrow">▲</span>
+                <span class="jump-label">JUMP</span>
+                <span class="jump-pulse"></span>
+            </button>
         </div>
     </div>
 
