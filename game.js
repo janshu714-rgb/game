@@ -29,14 +29,37 @@
     
     let _camera = null; // forward reference for resize handler
     
+    function isTouchDevice() {
+        return ('ontouchstart' in window) ||
+               (navigator.maxTouchPoints > 0) ||
+               window.matchMedia('(pointer: coarse)').matches ||
+               window.innerWidth <= 900;
+    }
+    
+    function updateTouchMode() {
+        if (isTouchDevice()) {
+            document.body.classList.add('is-touch');
+        } else {
+            document.body.classList.remove('is-touch');
+        }
+    }
+    
     function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        updateTouchMode();
         if (_camera) {
             _camera.resize(canvas.width, canvas.height);
+            if (typeof game !== 'undefined' && game.level) {
+                _camera.updateViewport(game.level.width, game.level.height, isTouchDevice());
+            }
         }
     }
     window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => {
+        setTimeout(resizeCanvas, 100);
+    });
+    updateTouchMode();
     resizeCanvas();
     
     // ─── DOM ELEMENTS ───
@@ -57,6 +80,14 @@
     const levelSelect = document.getElementById('levelSelect');
     const levelGrid = document.getElementById('levelGrid');
     const backToMenuBtn = document.getElementById('backToMenuBtn');
+    
+    // Mobile Gamepad Controls DOM
+    const mobileControls = document.getElementById('mobileControls');
+    const touchBtnLeft = document.getElementById('touchBtnLeft');
+    const touchBtnRight = document.getElementById('touchBtnRight');
+    const touchBtnJump = document.getElementById('touchBtnJump');
+    const touchBtnRewind = document.getElementById('touchBtnRewind');
+    const touchBtnInteract = document.getElementById('touchBtnInteract');
     
     // Generate title particles
     const titleParticles = document.getElementById('titleParticles');
@@ -145,9 +176,17 @@
         game.hintAlpha = 0;
         game.hintText = levelData.hint || '';
         
-        // Camera snap to player
-        game.camera.x = game.player.x - canvas.width / 2;
-        game.camera.y = game.player.y - canvas.height / 2;
+        // Camera snap to player with responsive viewport
+        game.camera.updateViewport(levelData.width, levelData.height, isTouchDevice());
+        game.camera.follow(
+            game.player.x + game.player.width / 2,
+            game.player.y + game.player.height / 2,
+            levelData.width,
+            levelData.height,
+            isTouchDevice()
+        );
+        game.camera.x = game.camera.targetX;
+        game.camera.y = game.camera.targetY;
         
         // Update HUD
         hudLevel.textContent = `Level ${index + 1}`;
@@ -156,6 +195,7 @@
         
         game.state = STATE.PLAYING;
         hud.classList.add('visible');
+        if (mobileControls) mobileControls.classList.add('visible');
         titleScreen.classList.remove('active');
         levelComplete.classList.remove('active');
         loopOverlay.classList.remove('active');
@@ -237,6 +277,7 @@
         
         levelComplete.classList.add('active');
         hud.classList.remove('visible');
+        if (mobileControls) mobileControls.classList.remove('visible');
         
         // Celebration particles
         for (let i = 0; i < 5; i++) {
@@ -256,6 +297,7 @@
         game.state = STATE.TITLE;
         titleScreen.classList.add('active');
         hud.classList.remove('visible');
+        if (mobileControls) mobileControls.classList.remove('visible');
         levelComplete.classList.remove('active');
         loopOverlay.classList.remove('active');
         levelSelect.classList.remove('active');
@@ -266,6 +308,7 @@
         levelSelect.classList.add('active');
         titleScreen.classList.remove('active');
         hud.classList.remove('visible');
+        if (mobileControls) mobileControls.classList.remove('visible');
         
         // Build level grid
         levelGrid.innerHTML = '';
@@ -309,92 +352,129 @@
     }
     
     // ─── UI EVENT LISTENERS ───
-    startBtn.addEventListener('click', () => {
+    function startGame() {
         game.sound.resume();
-        // If player has progress, show level select; otherwise start level 1
         if (game.progress.unlockedLevel > 0) {
             showLevelSelect();
         } else {
             loadLevel(0);
         }
+    }
+    startBtn.addEventListener('click', startGame);
+    startBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        startGame();
     });
     
     nextLevelBtn.addEventListener('click', () => {
+        game.sound.resume();
         loadLevel(game.currentLevel + 1);
     });
     
     restartBtn.addEventListener('click', () => {
+        game.sound.resume();
         loadLevel(game.currentLevel);
     });
     
     menuBtn.addEventListener('click', () => {
+        game.sound.resume();
         showLevelSelect();
     });
     
     backToMenuBtn.addEventListener('click', () => {
+        game.sound.resume();
         showTitle();
     });
     
-    // ─── MOBILE TOUCH CONTROLS ───
-    function createMobileControls() {
-        // Only show on touch devices
-        if (!('ontouchstart' in window)) return;
+    // ─── MOBILE TOUCH CONTROLS SETUP ───
+    function setupMobileControls() {
+        function bindTouchBtn(btn, action) {
+            if (!btn) return;
+            
+            let isDown = false;
+            
+            const handleStart = (e) => {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                game.sound.resume();
+                if (!isDown) {
+                    isDown = true;
+                    btn.classList.add('pressed');
+                    game.input.setTouch(action, true);
+                    if (action === 'jump' && navigator.vibrate) {
+                        try { navigator.vibrate(12); } catch (err) {}
+                    }
+                }
+            };
+            
+            const handleEnd = (e) => {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                if (isDown) {
+                    isDown = false;
+                    btn.classList.remove('pressed');
+                    game.input.setTouch(action, false);
+                }
+            };
+            
+            // Pointer events with capture
+            btn.addEventListener('pointerdown', (e) => {
+                handleStart(e);
+                try { btn.setPointerCapture(e.pointerId); } catch(err) {}
+            });
+            btn.addEventListener('pointerup', (e) => {
+                handleEnd(e);
+                try { btn.releasePointerCapture(e.pointerId); } catch(err) {}
+            });
+            btn.addEventListener('pointercancel', (e) => {
+                handleEnd(e);
+                try { btn.releasePointerCapture(e.pointerId); } catch(err) {}
+            });
+            
+            // Touch events
+            btn.addEventListener('touchstart', handleStart, { passive: false });
+            btn.addEventListener('touchend', handleEnd, { passive: false });
+            btn.addEventListener('touchcancel', handleEnd, { passive: false });
+            
+            // Mouse events
+            btn.addEventListener('mousedown', handleStart);
+            btn.addEventListener('mouseup', handleEnd);
+            btn.addEventListener('mouseleave', handleEnd);
+            
+            // Click fallback for assistive tap or synthetic clicks
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                game.sound.resume();
+                game.input.triggerTap(action);
+            });
+        }
         
-        const controls = document.createElement('div');
-        controls.id = 'mobileControls';
-        controls.style.cssText = `
-            position: fixed; bottom: 0; left: 0; width: 100%; 
-            padding: 15px; display: flex; justify-content: space-between;
-            z-index: 60; pointer-events: none;
-        `;
+        bindTouchBtn(touchBtnLeft, 'left');
+        bindTouchBtn(touchBtnRight, 'right');
+        bindTouchBtn(touchBtnJump, 'jump');
+        bindTouchBtn(touchBtnRewind, 'restart');
+        bindTouchBtn(touchBtnInteract, 'interact');
         
-        const btnStyle = `
-            width: 60px; height: 60px; border-radius: 50%;
-            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-            color: rgba(255,255,255,0.5); font-size: 1.5rem;
-            display: flex; align-items: center; justify-content: center;
-            pointer-events: all; user-select: none; -webkit-user-select: none;
-        `;
-        
-        const leftGroup = document.createElement('div');
-        leftGroup.style.cssText = 'display: flex; gap: 10px;';
-        
-        const leftBtn = document.createElement('div');
-        leftBtn.style.cssText = btnStyle;
-        leftBtn.textContent = '←';
-        leftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); game.input.touchLeft = true; });
-        leftBtn.addEventListener('touchend', (e) => { e.preventDefault(); game.input.touchLeft = false; });
-        
-        const rightBtn = document.createElement('div');
-        rightBtn.style.cssText = btnStyle;
-        rightBtn.textContent = '→';
-        rightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); game.input.touchRight = true; });
-        rightBtn.addEventListener('touchend', (e) => { e.preventDefault(); game.input.touchRight = false; });
-        
-        leftGroup.appendChild(leftBtn);
-        leftGroup.appendChild(rightBtn);
-        
-        const rightGroup = document.createElement('div');
-        rightGroup.style.cssText = 'display: flex; gap: 10px;';
-        
-        const jumpBtn = document.createElement('div');
-        jumpBtn.style.cssText = btnStyle + 'width: 70px; height: 70px; font-size: 1.2rem;';
-        jumpBtn.textContent = 'Jump';
-        jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); game.input.touchJump = true; });
-        
-        const restartTouchBtn = document.createElement('div');
-        restartTouchBtn.style.cssText = btnStyle + 'width: 45px; height: 45px; font-size: 0.9rem;';
-        restartTouchBtn.textContent = '↺';
-        restartTouchBtn.addEventListener('touchstart', (e) => { e.preventDefault(); game.input.touchRestart = true; });
-        
-        rightGroup.appendChild(restartTouchBtn);
-        rightGroup.appendChild(jumpBtn);
-        
-        controls.appendChild(leftGroup);
-        controls.appendChild(rightGroup);
-        document.body.appendChild(controls);
+        // Canvas touch tap to jump
+        canvas.addEventListener('pointerdown', (e) => {
+            game.sound.resume();
+            if (game.state === STATE.PLAYING && isTouchDevice()) {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
+                // If tapped on the right side of the screen within the game viewport
+                if (clickX > rect.width * 0.45 && clickY < game.camera.viewportH) {
+                    game.input.triggerTap('jump');
+                }
+            }
+        });
     }
-    createMobileControls();
+    setupMobileControls();
     
     // ─── MAIN GAME LOOP ───
     function update() {
@@ -461,7 +541,9 @@
             camera.follow(
                 player.x + player.width / 2,
                 player.y + player.height / 2,
-                level.width, level.height
+                level.width,
+                level.height,
+                isTouchDevice()
             );
         }
         
@@ -539,8 +621,12 @@
         
         if (!level) return;
         
+        ctx.save();
+        ctx.translate(Math.round(camera.screenOffsetX), Math.round(camera.screenOffsetY));
+        ctx.scale(camera.zoom, camera.zoom);
+        
         // Level tiles
-        level.render(ctx, camera.x, camera.y, canvas.width, canvas.height);
+        level.render(ctx, camera.x, camera.y, camera.viewportW / camera.zoom, camera.viewportH / camera.zoom);
         
         // Ghosts (render oldest first so newest are on top)
         for (let i = ghosts.length - 1; i >= 0; i--) {
@@ -555,26 +641,30 @@
         // Particles
         particles.render(ctx, camera.x, camera.y);
         
+        ctx.restore();
+        
         // Ghost count indicator
         if (ghosts.length > 0) {
             ctx.save();
-            ctx.globalAlpha = 0.4;
+            ctx.globalAlpha = 0.5;
             ctx.fillStyle = COLORS.ghost;
             ctx.font = '10px Orbitron, sans-serif';
             ctx.textAlign = 'left';
             const ghostText = `${ghosts.length} echo${ghosts.length > 1 ? 's' : ''}`;
-            ctx.fillText(ghostText, 10, canvas.height - 10);
+            const gy = (camera.isPortrait && isTouchDevice()) ? (camera.viewportH - 8) : (canvas.height - 12);
+            ctx.fillText(ghostText, 12, gy);
             ctx.restore();
         }
         
         // Hint text
         if (game.hintAlpha > 0 && game.hintText) {
             ctx.save();
-            ctx.globalAlpha = game.hintAlpha * 0.7;
+            ctx.globalAlpha = game.hintAlpha * 0.8;
             ctx.fillStyle = COLORS.text;
-            ctx.font = '13px Inter, sans-serif';
+            ctx.font = '12px Inter, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText(game.hintText, canvas.width / 2, canvas.height - 40);
+            const hy = (camera.isPortrait && isTouchDevice()) ? (camera.viewportH - 8) : 58;
+            ctx.fillText(game.hintText, canvas.width / 2, hy);
             ctx.restore();
         }
     }
@@ -588,5 +678,5 @@
     
     // Start
     gameLoop();
-    
+    window.game = game;
 })();
